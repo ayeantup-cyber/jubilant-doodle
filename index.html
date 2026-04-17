@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YT Simulator | Philosopher Observer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ff0000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+    <style>
+        body {
+            background: #000;
+            color: #fff;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            text-align: center;                                                           margin: 0;
+            padding: 20px;
+        }
+        #install-btn {
+            display: none;
+            width: 100%;
+            background: #FFD700;
+            color: #000;
+            font-weight: bold;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        input {
+            padding: 12px;
+            margin: 10px;
+            border-radius: 5px;
+            border: 1px solid #333;
+            background: #111;
+            color: #fff;
+            width: 80%;
+            max-width: 300px;
+        }
+        button.primary {
+            padding: 12px 24px;
+            background: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        hr { border: 0; border-top: 1px solid #222; margin: 30px 0; }
+        #my-code { font-family: monospace; letter-spacing: 2px; }
+        .container { max-width: 500px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <button id="install-btn">✨ INSTALL CAST APP</button>
+
+        <div id="setup">
+            <h2>Remote Connection</h2>
+            <input type="text" id="code-input" placeholder="Enter TV Code">
+            <br>
+            <button class="primary" onclick="join()">Link Device</button>
+            <hr>
+            <p>Or use this device as the receiver:</p>
+            <button class="primary" style="background: #333;" onclick="becomeTV()">Act as TV</button>
+        </div>
+
+        <div id="tv-display" style="display:none;">
+            <h1>TV CODE: <span id="my-code" style="color:cyan;"></span></h1>
+            <div id="player"></div>
+        </div>
+
+        <div id="remote-display" style="display:none;">
+            <h3>Connected to TV</h3>
+            <input type="text" id="video-id" placeholder="Paste YouTube Video ID">
+            <br>
+            <button class="primary" onclick="cast()">Cast to TV</button>
+            <p style="font-size: 0.8em; color: #666; margin-top: 20px;">
+                Tip: The ID is the code after 'v=' in the URL.
+            </p>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentCode = "";
+
+        // --- PWA LOGIC ---
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(() => console.log("Service Worker Registered"));
+        }
+
+        let deferredPrompt;
+        const installBtn = document.getElementById('install-btn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installBtn.style.display = 'block';
+        });
+
+        installBtn.addEventListener('click', () => {
+            installBtn.style.display = 'none';
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then((choice) => {
+                if (choice.outcome === 'accepted') console.log('User installed PWA');
+                deferredPrompt = null;
+            });
+        });
+
+        // --- CORE LOGIC ---
+        function becomeTV() {
+            currentCode = Math.floor(100000 + Math.random() * 900000).toString();
+            document.getElementById('my-code').innerText = currentCode;
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('tv-display').style.display = 'block';
+            socket.emit('join-room', currentCode);
+        }
+
+        function join() {
+            currentCode = document.getElementById('code-input').value;
+            if(!currentCode) return alert("Enter a code first!");
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('remote-display').style.display = 'block';
+            socket.emit('join-room', currentCode);
+        }
+
+        function cast() {
+            const vId = document.getElementById('video-id').value;
+            if(!vId) return alert("Enter a Video ID!");
+            socket.emit('cast-video', { code: currentCode, videoId: vId });
+            // Haptic feedback for the remote
+            if (navigator.vibrate) navigator.vibrate(50);
+        }
+
+        socket.on('play-video', (videoId) => {
+            // Updated embed with origin and autoplay parameters
+            const url = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&showinfo=0`;
+            document.getElementById('player').innerHTML =
+                `<iframe width="100%" height="315" src="${url}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+        });
+    </script>
+</body>
+</html>
